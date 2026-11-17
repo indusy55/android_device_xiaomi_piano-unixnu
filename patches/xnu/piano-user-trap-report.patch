@@ -1,6 +1,6 @@
 --- a/osfmk/arm64/sleh.c	2026-11-12 03:04:34
 +++ b/osfmk/arm64/sleh.c	2026-11-12 03:04:34
-@@ -164,6 +164,46 @@
+@@ -164,6 +164,48 @@
  
  static void handle_breakpoint(arm_saved_state_t *, uint32_t) __dead2;
  
@@ -11,7 +11,9 @@
 + * off, so the address can be looked up in the unslid dyld shared cache.
 + */
 +#include <vm/vm_shared_region.h>
++#ifndef boot_progress_stage
 +extern void boot_progress_stage(const char *);
++#endif
 +extern char *proc_best_name(struct proc *);
 +static void
 +piano_report_user_trap(arm_saved_state_t *state, uint32_t esr)

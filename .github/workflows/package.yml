@@ -1,30 +1,14 @@
 name: package
 
-# The example's copy of the packaging action (docs/porting/packaging.md). Replace the
-# firmware repository below with this board's; the device name appears in the artifact
-# paths. The platform seed comes from the repository secret UNIXNU_UNIQUE_CHIP_ID and is
-# baked into the images, so the run's artifacts belong to one device alone: download
-# them, then delete the run. Run it in a fork of the device repository.
-
 on:
   workflow_dispatch:
-    inputs:
-      os:
-        description: "OS profile of the images"
-        type: choice
-        options: ["17", "26", "27"]
-        default: "17"
 
 permissions:
   contents: read
 
-concurrency:
-  group: package-${{ github.ref }}
-  cancel-in-progress: true
-
 jobs:
   package:
-    runs-on: macos-26
+    runs-on: macos-latest
     timeout-minutes: 180
     steps:
       - uses: actions/checkout@v4
@@ -33,49 +17,123 @@ jobs:
           submodules: recursive
       - uses: actions/checkout@v4
         with:
-          repository: UniXNU/UniXNU
+          repository: IssacL04/UniXNU_Enc3l
           path: UniXNU
           submodules: recursive
       - uses: actions/checkout@v4
         with:
-          repository: REPLACE/uefi-example   # this board's firmware checkout
+          repository: xiaomi-pad-8-pro-development/android_device_xiaomi_piano-uefi
           path: uefi-example
-          submodules: recursive   # the firmware volume builds from the checkout's submodules
+          submodules: recursive
+
       - name: tools
         run: |
-          brew install dtc llvm lld cmake mtools blacktop/tap/ipsw
-          # Fail fast, naming the tool, before forty minutes of build.
-          ok=1
-          for t in clang xcodebuild make git ninja cmake dtc fdtget fdtput aea compression_tool \
-                   mformat mcopy ipsw; do
-            command -v "$t" >/dev/null || { echo "missing tool: $t"; ok=0; }
+          brew install dtc llvm lld cmake mtools openssl@3
+          for t in clang xcodebuild make git ninja cmake dtc mformat mcopy hdiutil diskutil curl python3; do
+            command -v "$t" >/dev/null || { echo "missing tool: $t"; exit 1; }
           done
-          for t in lld-link llvm-lib llvm-rc llvm-nm llvm-objcopy; do
-            [ -f "/opt/homebrew/opt/llvm/bin/$t" ] || [ -f "/opt/homebrew/opt/lld/bin/$t" ] || { echo "missing tool: $t"; ok=0; }
-          done
-          [ "$ok" = 1 ]
+
       - name: platform seed
         env:
           seed: ${{ secrets.UNIXNU_UNIQUE_CHIP_ID }}
         run: |
           if ! [[ "$seed" =~ ^[0-9a-fA-F]{8}$ ]]; then
-            echo 'Set the repository secret UNIXNU_UNIQUE_CHIP_ID: the platform seed of the device, 8 hex digits.' >&2
+            echo 'Set repository secret UNIXNU_UNIQUE_CHIP_ID to 8 hex digits' >&2
             exit 1
           fi
+
+      - name: external inputs
+        env:
+          IPSW_URL: https://updates.cdn-apple.com/2025SpringFCS/fullrestores/122-77166/DCA6CFE8-90E9-4B92-880D-3DE171798E40/iPad_Pro_HFR_17.7.11_21H461_Restore.ipsw
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/inputs"
+          curl -fL --retry 3 --retry-delay 5 -o "$RUNNER_TEMP/inputs/Restore.ipsw" "$IPSW_URL"
+          python3 - <<'PY'
+          import os, pathlib, zipfile
+          root = pathlib.Path(os.environ['RUNNER_TEMP']) / 'inputs'
+          wanted = {
+              '044-76040-038.dmg': '044-76040-038.dmg',
+              '044-76034-038.dmg': '044-76034-038.dmg',
+              'Firmware/044-76040-038.dmg.trustcache': '044-76040-038.dmg.trustcache',
+              'Firmware/044-76034-038.dmg.trustcache': '044-76034-038.dmg.trustcache',
+          }
+          with zipfile.ZipFile(root / 'Restore.ipsw') as archive:
+              names = set(archive.namelist())
+              for member, output in wanted.items():
+                  key = member if member in names else next(n for n in names if n.endswith('/' + member))
+                  (root / output).write_bytes(archive.read(key))
+                  print(output, (root / output).stat().st_size)
+          PY
+          python3 device/scripts/prepare-original-trust.py \
+            --tree "$PWD/UniXNU" --inputs "$RUNNER_TEMP/inputs" \
+            --output "$RUNNER_TEMP/inputs/original-trust.bin"
+
+      - name: data seed
+        run: |
+          sudo python3 device/scripts/prepare-ram-data.py \
+            --tree "$PWD/UniXNU" \
+            --source "$RUNNER_TEMP/inputs/044-76040-038.dmg" \
+            --systemos "$RUNNER_TEMP/inputs/044-76034-038.dmg" \
+            --output "$RUNNER_TEMP/seed" \
+            --config device/configs/piano_defconfig
+
+      - name: local config
+        env:
+          seed: ${{ secrets.UNIXNU_UNIQUE_CHIP_ID }}
+        run: |
+          cat > UniXNU/unixnu.local.toml <<EOF
+          [build]
+          device = "../device"
+          uefi = "$PWD/uefi-example/deps/Mu-Silicium"
+          unique_chip_id = "$seed"
+          dtb = "$RUNNER_TEMP/board.dtb"
+          trust_cache = "$RUNNER_TEMP/inputs/original-trust.bin"
+          data_ramdisk = "$RUNNER_TEMP/seed/data.dbrdisk"
+          jobs = 8
+          target = "DEBUG"
+          EOF
+
+      - name: dependencies and boot DTB
+        run: |
+          cd UniXNU
+          ./unixnu fetch -D ../device
+          SOC_DTS=$(echo out/feeds/UniXNU-sm8750-common-*/dts)
+          test -d "$SOC_DTS"
+          dtc -I dts -O dtb -i "$SOC_DTS" -o "$RUNNER_TEMP/board.dtb" ../device/dts/piano.dts
+
+      - name: verified-root policies and GPU firmware
+        run: |
+          cd UniXNU
+          ./unixnu tree -D ../device
+          TREE=$(echo out/piano/*/*/tree)
+          test -d "$TREE"
+          python3 ../device/scripts/prepare-ufs-policies.py \
+            --tree "$PWD/$TREE" --inputs "$RUNNER_TEMP/inputs" \
+            --openssl-prefix "$(brew --prefix openssl@3)"
+          FIRMWARE="$TREE/.cache/firmware/piano-gpu"
+          mkdir -p "$FIRMWARE"
+          cp ../device/firmware/gen80000_* "$FIRMWARE/"
       - name: package
-        working-directory: device
         env:
           UNIXNU_UNIQUE_CHIP_ID: ${{ secrets.UNIXNU_UNIQUE_CHIP_ID }}
           GITHUB_TOKEN: ${{ github.token }}
-        run: scripts/package.sh --os "${{ inputs.os }}" --uefi ../uefi-example
+        run: |
+          device/scripts/package.sh --os 17 --no-deps \
+            --ipsw "$RUNNER_TEMP/inputs/Restore.ipsw" \
+            --uefi "$PWD/uefi-example/deps/Mu-Silicium" \
+            --dtb "$RUNNER_TEMP/board.dtb" \
+            --trust-cache "$RUNNER_TEMP/inputs/original-trust.bin" \
+            --data-ramdisk "$RUNNER_TEMP/seed/data.dbrdisk"
+
       - name: images
         uses: actions/upload-artifact@v4
         with:
-          name: images-${{ inputs.os }}
+          name: images-17
           retention-days: 1
           if-no-files-found: error
           path: |
-            UniXNU/out/example/*/*/boot/boot.img
-            UniXNU/out/example/*/*/payload/payload.img
-            UniXNU/out/example/*/*/kernel/kernel.macho
-            UniXNU/out/example/*/*/package.manifest.json
+            UniXNU/out/piano/*/*/boot/boot.img
+            UniXNU/out/piano/*/*/payload/payload.img
+            UniXNU/out/piano/*/*/kernel/kernel.macho
+            UniXNU/out/piano/*/*/package.manifest.json

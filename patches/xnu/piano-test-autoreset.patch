@@ -1,13 +1,15 @@
 --- a/bsd/kern/bsd_init.c	2026-11-12 03:21:36
 +++ b/bsd/kern/bsd_init.c	2026-11-12 03:21:36
-@@ -564,7 +564,49 @@
+@@ -564,7 +564,51 @@
  }
  #endif
  
 +/* piano unattended test images: restart PIANO_TEST_AUTORESET_S seconds after bsd_init. */
 +#define PIANO_TEST_AUTORESET_S 150
 +extern void IOSleep(unsigned int milliseconds);
++#ifndef boot_progress_stage
 +extern void boot_progress_stage(const char *);
++#endif
 +static void
 +piano_test_autoreset(void *arg __unused, wait_result_t wr __unused)
 +{
