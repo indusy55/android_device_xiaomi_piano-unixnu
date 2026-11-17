@@ -114,6 +114,11 @@ jobs:
           FIRMWARE="$TREE/.cache/firmware/piano-gpu"
           mkdir -p "$FIRMWARE"
           cp ../device/firmware/gen80000_* "$FIRMWARE/"
+          cd ../device/firmware
+          for panel in boe csot; do
+            xxd -i "novatek_nt36532_piano_fw_${panel}.bin" \
+              > "$OLDPWD/$TREE/drivers/PaganiInput/Nvt/NvtFirmware_${panel}.inc"
+          done
       - name: package
         env:
           UNIXNU_UNIQUE_CHIP_ID: ${{ secrets.UNIXNU_UNIQUE_CHIP_ID }}
