@@ -117,6 +117,7 @@ jobs:
           cd ../device/firmware
           for panel in boe csot; do
             xxd -i "novatek_nt36532_piano_fw_${panel}.bin" \
+              | sed "s/novatek_nt36532_piano_fw_${panel}_bin/nvt_fw_${panel}/g" \
               > "$OLDPWD/$TREE/drivers/PaganiInput/Nvt/NvtFirmware_${panel}.inc"
           done
       - name: package
