@@ -118,6 +118,8 @@ jobs:
           ./unixnu tree -D ../device
           TREE=$(echo out/piano/*/*/tree)
           test -d "$TREE"
+          mkdir -p "$TREE/build"
+          cp "$RUNNER_TEMP/board.dtb" "$TREE/build/piano-ci.dtb"
           python3 ../device/scripts/prepare-ufs-policies.py \
             --tree "$PWD/$TREE" --inputs "$RUNNER_TEMP/inputs" \
             --openssl-prefix "$(brew --prefix openssl@3)"

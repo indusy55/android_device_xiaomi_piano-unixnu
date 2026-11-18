@@ -52,6 +52,8 @@ UNIXNU = "1"
 # in the kernel field after the firmware volume; pianoPkg PianoPayloadDxe
 # points /chosen initrd at it for UniXNURamDiskDxe.
 embed_payload = true
+# Built by the packaging workflow from dts/piano.dts plus the pinned SoC DTSI.
+dtb = "build/piano-ci.dtb"
 
 [payload]
 volume = "UNIXNUPIANO"
