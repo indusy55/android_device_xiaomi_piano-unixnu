@@ -136,7 +136,7 @@ jobs:
           UNIXNU_UNIQUE_CHIP_ID: ${{ secrets.UNIXNU_UNIQUE_CHIP_ID }}
           GITHUB_TOKEN: ${{ github.token }}
         run: |
-          device/scripts/package.sh --os 17 --no-deps \
+          device/scripts/package.sh --os 17 \
             --ipsw "$RUNNER_TEMP/inputs/Restore.ipsw" \
             --uefi "$PWD/uefi-example/deps/Mu-Silicium" \
             --trust-cache "$RUNNER_TEMP/inputs/original-trust.bin" \
