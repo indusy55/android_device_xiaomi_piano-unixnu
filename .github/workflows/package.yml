@@ -128,6 +128,9 @@ jobs:
               | sed "s/novatek_nt36532_piano_fw_${panel}_bin/nvt_fw_${panel}/g" \
               > "$OLDPWD/$TREE/drivers/PaganiInput/Nvt/NvtFirmware_${panel}.inc"
           done
+      - name: firmware dependencies
+        run: uefi-example/tools/setup-deps.sh
+
       - name: package
         env:
           UNIXNU_UNIQUE_CHIP_ID: ${{ secrets.UNIXNU_UNIQUE_CHIP_ID }}
