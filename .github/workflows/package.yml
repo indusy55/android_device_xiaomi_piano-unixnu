@@ -32,6 +32,8 @@ jobs:
           for t in clang xcodebuild make git ninja cmake dtc mformat mcopy hdiutil diskutil curl python3; do
             command -v "$t" >/dev/null || { echo "missing tool: $t"; exit 1; }
           done
+          echo "/opt/homebrew/opt/llvm/bin" >> "$GITHUB_PATH"
+          echo "/opt/homebrew/opt/lld/bin" >> "$GITHUB_PATH"
 
       - name: platform seed
         env:
