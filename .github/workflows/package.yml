@@ -136,7 +136,6 @@ jobs:
           device/scripts/package.sh --os 17 --no-deps \
             --ipsw "$RUNNER_TEMP/inputs/Restore.ipsw" \
             --uefi "$PWD/uefi-example/deps/Mu-Silicium" \
-            --dtb "$RUNNER_TEMP/board.dtb" \
             --trust-cache "$RUNNER_TEMP/inputs/original-trust.bin" \
             --data-ramdisk "$RUNNER_TEMP/seed/data.dbrdisk"
 
